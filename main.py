@@ -22,7 +22,7 @@ import config
 
 # Try to import inky, fall back to preview mode if not available
 try:
-    from inky.auto import auto
+    from inky.inky_uc8159 import Inky as InkyImpression
     INKY_AVAILABLE = True
 except ImportError:
     INKY_AVAILABLE = False
@@ -49,8 +49,9 @@ class NERVDashboard:
         )
 
         # Initialize display if available
+        # Inky Impression 5.7" uses UC8159 driver and needs manual init (no EEPROM)
         if INKY_AVAILABLE:
-            self.display = auto()
+            self.display = InkyImpression(resolution=(self.width, self.height))
         else:
             self.display = None
 

@@ -232,15 +232,17 @@ class NERVDashboard:
                        font=self.font_medium, fill=self._get_color("accent"))
 
     def draw_daylight_arc(self, x, y, width, height, current_time):
-        """Draw daylight arc showing sun position between sunrise and sunset."""
+        """Draw 24-hour sun arc: midnight to midnight with S-curves for night."""
+        import math
+
         # Get sun times
         try:
             s = sun(self.location.observer, date=current_time.date(),
                    tzinfo=self.location.timezone)
             sunrise = s["sunrise"]
             sunset = s["sunset"]
+            noon = s["noon"]
         except Exception as e:
-            # Fallback if sun calculation fails
             self.draw.text((x, y), f"Sun calc error: {e}",
                           font=self.font_small, fill=self._get_color("accent"))
             return
@@ -250,64 +252,89 @@ class NERVDashboard:
                        font=self.font_jp, fill=self._get_color("secondary"))
 
         arc_y = y + 25
-        arc_height = height - 40
+        arc_height = height - 50  # Leave room for labels
 
-        # Draw arc background (the path)
+        # Calculate time fractions (0-1 over 24 hours)
+        # Use naive datetime for consistent math (astral returns timezone-aware)
+        midnight = current_time.replace(hour=0, minute=0, second=0, microsecond=0)
+        sunrise_naive = sunrise.replace(tzinfo=None)
+        sunset_naive = sunset.replace(tzinfo=None)
+        midnight_naive = midnight if midnight.tzinfo is None else midnight.replace(tzinfo=None)
+        current_naive = current_time if current_time.tzinfo is None else current_time.replace(tzinfo=None)
+
+        sunrise_frac = (sunrise_naive - midnight_naive).total_seconds() / 86400
+        sunset_frac = (sunset_naive - midnight_naive).total_seconds() / 86400
+
+        # Horizon line Y position (middle of arc area)
+        horizon_y = arc_y + arc_height // 2
+
+        def get_sun_height(time_frac):
+            """Calculate sun height: positive during day (arc), negative at night (S-curve)."""
+            if sunrise_frac <= time_frac <= sunset_frac:
+                # Daytime: parabolic arc above horizon
+                # Normalize to 0-1 within daylight hours
+                day_progress = (time_frac - sunrise_frac) / (sunset_frac - sunrise_frac)
+                # Parabola peaking at solar noon
+                return arc_height // 2 * math.sin(day_progress * math.pi)
+            elif time_frac < sunrise_frac:
+                # Before sunrise: S-curve rising from midnight
+                # Progress from midnight (0) to sunrise
+                night_progress = time_frac / sunrise_frac
+                # S-curve using sine, staying below horizon
+                return -arc_height // 4 * math.cos(night_progress * math.pi / 2)
+            else:
+                # After sunset: S-curve descending to midnight
+                # Progress from sunset to midnight (1)
+                night_progress = (time_frac - sunset_frac) / (1 - sunset_frac)
+                # S-curve descending below horizon
+                return -arc_height // 4 * math.sin(night_progress * math.pi / 2)
+
+        # Draw the full 24-hour arc path
         arc_color = self._get_color("secondary")
-        arc_points = []
+        prev_point = None
         for i in range(width + 1):
-            # Parabolic arc
-            progress = i / width
-            arc_offset = -4 * arc_height * (progress - 0.5) ** 2 + arc_height
-            arc_points.append((x + i, arc_y + arc_height - arc_offset))
-
-        # Draw arc line
-        for i in range(len(arc_points) - 1):
-            self.draw.line([arc_points[i], arc_points[i + 1]],
-                          fill=arc_color, width=2)
+            time_frac = i / width
+            sun_h = get_sun_height(time_frac)
+            point = (x + i, horizon_y - sun_h)
+            if prev_point:
+                self.draw.line([prev_point, point], fill=arc_color, width=2)
+            prev_point = point
 
         # Draw horizon line
-        horizon_y = arc_y + arc_height
         self.draw.line([(x, horizon_y), (x + width, horizon_y)],
                       fill=self._get_color("primary"), width=1)
 
-        # Calculate sun position
-        now_ts = current_time.timestamp()
-        sunrise_ts = sunrise.timestamp()
-        sunset_ts = sunset.timestamp()
+        # Draw sunrise vertical line
+        sunrise_x = x + int(sunrise_frac * width)
+        self.draw.line([(sunrise_x, arc_y), (sunrise_x, horizon_y + arc_height // 4)],
+                      fill=self._get_color("warning"), width=1)
+        # Sunrise time to the LEFT of the line
+        sunrise_str = sunrise.strftime("%H:%M")
+        self.draw.text((sunrise_x - 45, horizon_y + arc_height // 4 + 2), sunrise_str,
+                       font=self.font_small, fill=self._get_color("warning"))
 
-        if now_ts < sunrise_ts:
-            # Before sunrise
-            sun_progress = 0
-            is_day = False
-        elif now_ts > sunset_ts:
-            # After sunset
-            sun_progress = 1
-            is_day = False
-        else:
-            # During day
-            sun_progress = (now_ts - sunrise_ts) / (sunset_ts - sunrise_ts)
-            is_day = True
+        # Draw sunset vertical line
+        sunset_x = x + int(sunset_frac * width)
+        self.draw.line([(sunset_x, arc_y), (sunset_x, horizon_y + arc_height // 4)],
+                      fill=self._get_color("accent"), width=1)
+        # Sunset time to the RIGHT of the line
+        sunset_str = sunset.strftime("%H:%M")
+        self.draw.text((sunset_x + 5, horizon_y + arc_height // 4 + 2), sunset_str,
+                       font=self.font_small, fill=self._get_color("accent"))
 
-        # Draw sun position
-        sun_x = x + int(sun_progress * width)
-        sun_arc_offset = -4 * arc_height * (sun_progress - 0.5) ** 2 + arc_height
-        sun_y = int(arc_y + arc_height - sun_arc_offset)
+        # Calculate current sun position
+        now_frac = (current_naive - midnight_naive).total_seconds() / 86400
+        sun_h = get_sun_height(now_frac)
+        sun_x = x + int(now_frac * width)
+        sun_y = int(horizon_y - sun_h)
 
+        # Sun color: yellow during day, red at night
+        is_day = sunrise_frac <= now_frac <= sunset_frac
         sun_color = self._get_color("warning") if is_day else self._get_color("accent")
         sun_radius = 8
         self.draw.ellipse([sun_x - sun_radius, sun_y - sun_radius,
                           sun_x + sun_radius, sun_y + sun_radius],
                          fill=sun_color)
-
-        # Draw sunrise/sunset times
-        sunrise_str = sunrise.strftime("%H:%M")
-        sunset_str = sunset.strftime("%H:%M")
-
-        self.draw.text((x, horizon_y + 5), f"{config.LABELS['sunrise']} {sunrise_str}",
-                       font=self.font_small, fill=self._get_color("secondary"))
-        self.draw.text((x + width - 80, horizon_y + 5), f"{config.LABELS['sunset']} {sunset_str}",
-                       font=self.font_small, fill=self._get_color("secondary"))
 
     def draw_nerv_header(self):
         """Draw NERV-style header with hazard stripes."""

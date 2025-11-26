@@ -40,6 +40,36 @@ THEME = {
 # Update interval (seconds)
 UPDATE_INTERVAL = 300  # 5 minutes
 
+# Pages configuration
+PAGES = ["dashboard", "todos", "experimental"]
+DEFAULT_PAGE = "dashboard"
+
+# Button mapping (active low, accent on press)
+# A = prev page, B = next page, C = special action, D = refresh
+BUTTONS = {
+    "A": 5,   # Previous page
+    "B": 6,   # Next page
+    "C": 16,  # Special/page-specific action
+    "D": 24,  # Force refresh
+}
+
+# Calendar (iCloud ICS)
+# To get your calendar URL:
+# 1. Open Calendar app on Mac
+# 2. Right-click your calendar -> Share Calendar
+# 3. Check "Public Calendar" and copy the URL
+CALENDAR_ICS_URL = ""  # Paste your webcal:// or https:// URL here
+CALENDAR_CACHE_MINUTES = 15
+
+# Notion Integration
+# Setup:
+# 1. Go to notion.so/my-integrations
+# 2. Create new integration, copy the API key
+# 3. Share your database with the integration
+# 4. Copy the database ID from the URL
+NOTION_API_KEY = ""
+NOTION_DATABASE_ID = ""
+
 # Japanese labels
 LABELS = {
     "time": "現在時刻",           # Current Time

@@ -10,6 +10,7 @@ Features:
 - NERV/MAGI aesthetic elements
 """
 
+import signal
 import sys
 import time
 from datetime import datetime
@@ -27,6 +28,23 @@ try:
 except ImportError:
     INKY_AVAILABLE = False
     print("Inky not available - running in preview mode")
+
+# Try to import GPIO for button support
+try:
+    import gpiod
+    from gpiod.line import Bias, Edge
+    GPIO_AVAILABLE = True
+except ImportError:
+    GPIO_AVAILABLE = False
+    print("GPIO not available - buttons disabled")
+
+# Button GPIO pins (active low with pull-up)
+BUTTONS = {
+    "A": 5,
+    "B": 6,
+    "C": 16,
+    "D": 24,
+}
 
 
 class NERVDashboard:
@@ -383,6 +401,52 @@ class NERVDashboard:
             image.save("preview.png")
             print(f"Preview saved to preview.png at {datetime.now().strftime('%H:%M:%S')}")
 
+    def setup_buttons(self):
+        """Set up GPIO button handlers."""
+        if not GPIO_AVAILABLE:
+            return None
+
+        try:
+            chip = gpiod.Chip("/dev/gpiochip4")  # Pi 5 uses gpiochip4
+        except FileNotFoundError:
+            try:
+                chip = gpiod.Chip("/dev/gpiochip0")  # Older Pi uses gpiochip0
+            except FileNotFoundError:
+                print("No GPIO chip found - buttons disabled")
+                return None
+
+        # Request button B line for edge detection
+        line_config = gpiod.LineSettings(
+            edge_detection=Edge.FALLING,
+            bias=Bias.PULL_UP,
+            debounce_period=datetime.timedelta(milliseconds=100)
+        )
+
+        try:
+            self.button_request = chip.request_lines(
+                consumer="nerv-dashboard",
+                config={BUTTONS["B"]: line_config}
+            )
+            print(f"Button B (GPIO {BUTTONS['B']}) ready - press for force refresh")
+            return self.button_request
+        except Exception as e:
+            print(f"Could not set up buttons: {e}")
+            return None
+
+    def check_buttons(self):
+        """Check if button B was pressed."""
+        if not hasattr(self, 'button_request') or self.button_request is None:
+            return False
+
+        # Check for edge events (non-blocking)
+        if self.button_request.wait_edge_events(timeout=0):
+            events = self.button_request.read_edge_events()
+            for event in events:
+                if event.line_offset == BUTTONS["B"]:
+                    print("Button B pressed - force refresh!")
+                    return True
+        return False
+
     def run(self):
         """Main loop - update display periodically."""
         print("NERV Dashboard starting...")
@@ -390,10 +454,23 @@ class NERVDashboard:
         print(f"Update interval: {config.UPDATE_INTERVAL} seconds")
         print("-" * 40)
 
+        # Set up button handlers
+        self.setup_buttons()
+
+        # Initial update
+        self.update_display()
+
         try:
             while True:
-                self.update_display()
-                time.sleep(config.UPDATE_INTERVAL)
+                # Check for button press every 0.5 seconds
+                for _ in range(config.UPDATE_INTERVAL * 2):
+                    if self.check_buttons():
+                        self.update_display()
+                        break
+                    time.sleep(0.5)
+                else:
+                    # No button press - do scheduled update
+                    self.update_display()
         except KeyboardInterrupt:
             print("\nDashboard stopped.")
             sys.exit(0)

@@ -3,3 +3,5 @@ Pillow>=10.0.0
 astral>=3.2
 requests>=2.31.0
 RPi.GPIO>=0.7.1
+icalendar>=5.0.0
+recurring-ical-events>=2.1.0

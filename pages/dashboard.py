@@ -34,12 +34,20 @@ class DashboardPage(Page):
             loc["longitude"]
         )
 
-        # Placeholder for calendar events (will be populated by integration)
+        # Calendar events
         self.events = []
+        self._last_fetch = None
 
-    def set_events(self, events):
-        """Set calendar events to display."""
-        self.events = events
+    def refresh_events(self):
+        """Fetch fresh calendar events."""
+        try:
+            from integrations.calendar import get_calendar_events
+            self.events = get_calendar_events(max_events=6)
+            self._last_fetch = datetime.now()
+            print(f"Fetched {len(self.events)} calendar events")
+        except Exception as e:
+            print(f"Error fetching calendar events: {e}")
+            self.events = []
 
     def draw_segmented_digit(self, draw, x, y, digit, size=80, thickness=10):
         """Draw a single 7-segment style digit."""
@@ -205,51 +213,59 @@ class DashboardPage(Page):
                      sun_x + sun_radius, sun_y + sun_radius],
                     fill=sun_color)
 
-    def draw_events(self, draw, x, y, width, height):
-        """Draw upcoming calendar events."""
-        draw.text((x, y), "予定", font=self.fonts["jp"],
-                  fill=self._get_color("secondary"))  # "Schedule"
+    def draw_events(self, draw, x, y, width, max_events=5):
+        """Draw upcoming calendar events with colored symbols."""
+        draw.text((x, y), "予定 / UPCOMING",
+                  font=self.fonts["small"], fill=self._get_color("accent"))
 
         event_y = y + 22
+        line_height = 20
 
         if not self.events:
             draw.text((x, event_y), "No upcoming events",
                      font=self.fonts["small"], fill=self._get_color("secondary"))
             return
 
-        # Show up to 4 events
-        for i, event in enumerate(self.events[:4]):
-            if event_y + 20 > y + height:
-                break
-
+        for i, event in enumerate(self.events[:max_events]):
+            symbol = event.get("symbol", "●")
             time_str = event.get("time", "")
             title = event.get("title", "Untitled")
+            color_name = event.get("color", "primary")
 
-            # Truncate title if too long
-            max_title_len = 28
+            # Get color for this calendar
+            event_color = self.colors.get(color_name, self._get_color("primary"))
+
+            # Truncate title if needed
+            max_title_len = 30
             if len(title) > max_title_len:
                 title = title[:max_title_len - 2] + ".."
 
-            # Time in accent color, title in primary
-            draw.text((x, event_y), time_str,
-                     font=self.fonts["small"], fill=self._get_color("accent"))
-            draw.text((x + 50, event_y), title,
+            # Symbol in calendar color
+            draw.text((x, event_y), symbol, font=self.fonts["small"], fill=event_color)
+
+            # Time
+            time_x = x + 18
+            draw.text((time_x, event_y), time_str,
+                     font=self.fonts["small"], fill=self._get_color("secondary"))
+
+            # Title
+            title_x = time_x + 65
+            draw.text((title_x, event_y), title,
                      font=self.fonts["small"], fill=self._get_color("primary"))
 
-            event_y += 22
+            event_y += line_height
 
     def render(self, page_index=0, total_pages=1):
         """Render the dashboard page."""
         image, draw = super().render(page_index, total_pages)
         now = datetime.now()
 
-        # Layout: Full width, stacked vertically
-        # Top section: Time + Date (left-aligned)
-        # Middle: Daylight arc (full width)
-        # Bottom: Upcoming events
+        # Fetch events if needed
+        if not self._last_fetch:
+            self.refresh_events()
 
         margin = 20
-        content_top = 45  # Below header
+        content_top = 45
 
         # Time display (large, top-left)
         self.draw_time(draw, margin, content_top, now)
@@ -265,9 +281,10 @@ class DashboardPage(Page):
         self.draw_daylight_arc(draw, margin, arc_y, self.width - (margin * 2), 95, now)
         self.draw_border_frame(draw, margin - 5, arc_y - 5, self.width - (margin * 2) + 10, 100)
 
-        # Events section (bottom right, beside arc labels)
-        events_x = self.width // 2 + 40
-        events_y = arc_y + 100
-        self.draw_events(draw, events_x, events_y, self.width - events_x - margin, 80)
+        # Events section (right side of screen, next to time)
+        events_x = 380
+        events_y = content_top - 25
+        self.draw_events(draw, events_x, events_y, self.width - events_x - margin, max_events=6)
+        self.draw_border_frame(draw, events_x - 10, events_y - 5, self.width - events_x - margin + 15, 155)
 
         return image

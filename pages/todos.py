@@ -1,6 +1,6 @@
 """
 Todos Page - Notion integration
-Today's tasks, goals, daily non-negotiables
+Today's tasks and overdue items
 """
 
 from datetime import datetime
@@ -18,101 +18,119 @@ class TodosPage(Page):
     def __init__(self, width, height, fonts):
         super().__init__(width, height, fonts)
         self.todos = []
-        self.goals = []
-        self.non_negotiables = []
+        self._last_fetch = None
 
-    def set_todos(self, todos, goals=None, non_negotiables=None):
-        """Set todo data from Notion."""
-        self.todos = todos or []
-        self.goals = goals or []
-        self.non_negotiables = non_negotiables or []
+    def refresh_todos(self):
+        """Fetch fresh todos from Notion."""
+        try:
+            from integrations.notion import get_notion_todos
+            self.todos = get_notion_todos()
+            self._last_fetch = datetime.now()
+            print(f"Fetched {len(self.todos)} todos from Notion")
+        except Exception as e:
+            print(f"Error fetching Notion todos: {e}")
+            self.todos = []
 
-    def draw_checkbox(self, draw, x, y, checked=False, size=12):
+    def draw_checkbox(self, draw, x, y, checked=False, overdue=False, size=14):
         """Draw a checkbox."""
-        color = self._get_color("primary")
+        color = self._get_color("accent") if overdue else self._get_color("primary")
         draw.rectangle([x, y, x + size, y + size], outline=color, width=1)
         if checked:
-            # Draw checkmark
-            draw.line([(x + 2, y + size//2), (x + size//2, y + size - 2)], fill=color, width=2)
-            draw.line([(x + size//2, y + size - 2), (x + size - 2, y + 2)], fill=color, width=2)
+            draw.line([(x + 3, y + size//2), (x + size//2, y + size - 3)], fill=color, width=2)
+            draw.line([(x + size//2, y + size - 3), (x + size - 3, y + 3)], fill=color, width=2)
 
-    def draw_todo_section(self, draw, x, y, title, items, max_items=5):
-        """Draw a section of todos with title."""
-        # Section title
-        draw.text((x, y), title, font=self.fonts["small"],
-                  fill=self._get_color("accent"))
+    def draw_todo_item(self, draw, x, y, todo, max_width=280):
+        """Draw a single todo item with checkbox, title, and optional due indicator."""
+        title = todo.get("title", "Untitled")
+        done = todo.get("done", False)
+        is_overdue = todo.get("is_overdue", False)
+        due_date = todo.get("due_date")
 
-        item_y = y + 22
+        # Checkbox
+        self.draw_checkbox(draw, x, y + 1, done, is_overdue, size=14)
 
-        if not items:
-            draw.text((x + 20, item_y), "No items",
-                     font=self.fonts["small"], fill=self._get_color("secondary"))
-            return item_y + 22
+        # Title - truncate if needed
+        max_chars = 38
+        if len(title) > max_chars:
+            title = title[:max_chars - 2] + ".."
 
-        for i, item in enumerate(items[:max_items]):
-            if isinstance(item, dict):
-                text = item.get("title", "Untitled")
-                checked = item.get("done", False)
-            else:
-                text = str(item)
-                checked = False
+        # Color based on state
+        if done:
+            text_color = self._get_color("secondary")
+        elif is_overdue:
+            text_color = self._get_color("accent")
+        else:
+            text_color = self._get_color("primary")
 
-            # Truncate if too long
-            max_len = 35
-            if len(text) > max_len:
-                text = text[:max_len - 2] + ".."
+        draw.text((x + 22, y), title, font=self.fonts["small"], fill=text_color)
 
-            self.draw_checkbox(draw, x, item_y + 2, checked)
-
-            text_color = self._get_color("secondary") if checked else self._get_color("primary")
-            draw.text((x + 20, item_y), text, font=self.fonts["small"], fill=text_color)
-
-            item_y += 22
-
-        return item_y
+        # Due date indicator on right side if overdue
+        if is_overdue and due_date:
+            due_str = due_date.strftime("%m/%d")
+            draw.text((x + max_width - 40, y), due_str,
+                     font=self.fonts["small"], fill=self._get_color("accent"))
 
     def render(self, page_index=0, total_pages=1):
         """Render the todos page."""
         image, draw = super().render(page_index, total_pages)
 
         margin = 20
-        content_top = 50
+        content_top = 45
+
+        # Fetch todos if needed (on first render or refresh)
+        if not self._last_fetch:
+            self.refresh_todos()
 
         # Date header
         now = datetime.now()
-        date_str = now.strftime("%A, %B %d")
+        date_str = now.strftime("%A, %B %d").upper()
         draw.text((margin, content_top), date_str,
                   font=self.fonts["medium"], fill=self._get_color("primary"))
 
-        # Layout: Two columns
-        col1_x = margin
-        col2_x = self.width // 2 + 10
-        section_y = content_top + 35
+        # Section divider
+        draw.text((margin, content_top + 28), "今日のタスク / TODAY'S TASKS",
+                  font=self.fonts["small"], fill=self._get_color("accent"))
 
-        # Left column: Today's Tasks
-        next_y = self.draw_todo_section(draw, col1_x, section_y,
-                                        "今日のタスク / TODAY", self.todos, max_items=8)
+        # Count overdue items
+        overdue_count = sum(1 for t in self.todos if t.get("is_overdue"))
+        if overdue_count > 0:
+            draw.text((self.width - margin - 120, content_top + 28),
+                     f"OVERDUE: {overdue_count}",
+                     font=self.fonts["small"], fill=self._get_color("accent"))
 
-        # Right column: Goals
-        self.draw_todo_section(draw, col2_x, section_y,
-                              "目標 / GOALS", self.goals, max_items=4)
+        # Todo list
+        item_y = content_top + 55
+        line_height = 24
+        max_items = 14  # Fit on screen
 
-        # Right column: Non-negotiables (below goals)
-        self.draw_todo_section(draw, col2_x, section_y + 115,
-                              "必須 / NON-NEGOTIABLES", self.non_negotiables, max_items=4)
+        if not self.todos:
+            # No todos message
+            draw.text((margin + 22, item_y), "No tasks due today",
+                     font=self.fonts["small"], fill=self._get_color("secondary"))
+            draw.text((margin + 22, item_y + line_height),
+                     "Check secrets.py for Notion setup",
+                     font=self.fonts["small"], fill=self._get_color("secondary"))
+        else:
+            for i, todo in enumerate(self.todos[:max_items]):
+                self.draw_todo_item(draw, margin, item_y, todo, max_width=self.width - margin * 2)
+                item_y += line_height
 
-        # Border around content
+            # Overflow indicator
+            if len(self.todos) > max_items:
+                remaining = len(self.todos) - max_items
+                draw.text((margin, item_y),
+                         f"+ {remaining} more tasks...",
+                         font=self.fonts["small"], fill=self._get_color("secondary"))
+
+        # Border around content area
         self.draw_border_frame(draw, margin - 5, content_top - 5,
-                              self.width - (margin * 2) + 10, self.height - content_top - 25)
+                              self.width - margin * 2 + 10, self.height - content_top - 25)
 
-        # Placeholder message if no Notion connection
-        if not self.todos and not self.goals and not self.non_negotiables:
-            center_y = self.height // 2
-            draw.text((self.width // 2 - 100, center_y),
-                     "Connect Notion to see tasks",
-                     font=self.fonts["small"], fill=self._get_color("secondary"))
-            draw.text((self.width // 2 - 80, center_y + 20),
-                     "See config.py for setup",
-                     font=self.fonts["small"], fill=self._get_color("secondary"))
+        # Last updated timestamp at bottom
+        if self._last_fetch:
+            updated_str = f"Updated: {self._last_fetch.strftime('%H:%M')}"
+            draw.text((self.width - margin - 100, self.height - 35),
+                     updated_str, font=self.fonts["small"],
+                     fill=self._get_color("secondary"))
 
         return image

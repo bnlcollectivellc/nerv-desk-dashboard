@@ -13,7 +13,7 @@ Features:
 import signal
 import sys
 import time
-from datetime import datetime
+from datetime import datetime, timedelta
 from PIL import Image, ImageDraw, ImageFont
 
 from astral import LocationInfo
@@ -419,7 +419,7 @@ class NERVDashboard:
         line_config = gpiod.LineSettings(
             edge_detection=Edge.FALLING,
             bias=Bias.PULL_UP,
-            debounce_period=datetime.timedelta(milliseconds=100)
+            debounce_period=timedelta(milliseconds=100)
         )
 
         try:

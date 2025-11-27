@@ -42,7 +42,7 @@ class DashboardPage(Page):
         """Fetch fresh calendar events."""
         try:
             from integrations.calendar import get_calendar_events
-            self.events = get_calendar_events(max_events=6)
+            self.events = get_calendar_events(max_events=20)
             self._last_fetch = datetime.now()
             print(f"Fetched {len(self.events)} calendar events")
         except Exception as e:
@@ -337,10 +337,11 @@ class DashboardPage(Page):
 
         # Astral chart at bottom (no box, part of environment)
         arc_height = 65
+        arc_gap = 15  # Extra headspace above astral chart
         arc_y = self.height - arc_height - 5
 
-        # Calculate available height for boxes
-        available_height = arc_y - content_top - gap
+        # Calculate available height for boxes (with gap above astral chart)
+        available_height = arc_y - content_top - gap - arc_gap
 
         # Layout: Two columns with uniform gap
         col_gap = gap
@@ -357,11 +358,11 @@ class DashboardPage(Page):
         self.draw_border_frame(draw, margin, content_top, left_col_width, left_time_box_height)
 
         # Time display (centered in box)
-        time_y = content_top + 15
+        time_y = content_top + 12
         self.draw_time(draw, margin + 5, time_y, now, left_col_width - 10)
 
-        # Date display (below time)
-        date_y = content_top + left_time_box_height - 35
+        # Date display (below time, reduced gap - 75% less space)
+        date_y = time_y + 90 + 5  # time height (~90) + small gap (was ~35 from bottom)
         self.draw_date(draw, margin + 5, date_y, now, left_col_width - 10)
 
         # === LEFT COLUMN: PLACEHOLDER MODULE BOX ===

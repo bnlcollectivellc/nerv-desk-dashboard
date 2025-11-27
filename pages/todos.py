@@ -102,7 +102,7 @@ class TodosPage(Page):
     def draw_non_negotiables(self, draw, x, y, width, height):
         """Draw the Non-Negotiables box."""
         # Header
-        draw.text((x, y), "必須 / NON-NEGOTIABLES",
+        draw.text((x, y), "必須 / NN",
                   font=self.fonts["small"], fill=self._get_color("accent"))
 
         # Items

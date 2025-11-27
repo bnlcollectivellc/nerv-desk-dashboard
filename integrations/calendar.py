@@ -99,11 +99,11 @@ class CalendarClient:
                 if start_time is None:
                     continue
 
-                # Format time string
+                # Format time string (24hr, no colon for consistency)
                 if is_all_day:
-                    time_str = "ALL DAY"
+                    time_str = "ALLD"
                 else:
-                    time_str = start_time.strftime("%H:%M")
+                    time_str = start_time.strftime("%H%M")
 
                 all_events.append({
                     "title": summary,

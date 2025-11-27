@@ -4,7 +4,6 @@ Time, date, daylight arc, upcoming events
 """
 
 import math
-import random
 from datetime import datetime, timedelta
 from PIL import ImageDraw
 
@@ -126,59 +125,30 @@ class DashboardPage(Page):
         # Return the left edge of time for date alignment
         return start_x
 
-    def draw_date(self, draw, x, y, current_time, align_right_to_x):
-        """Draw date display, right-aligned to the left edge of the time."""
+    def draw_date(self, draw, x, y, current_time, box_width):
+        """Draw date display using small font, centered in box."""
         date_str = current_time.strftime("%Y.%m.%d")
-        day_str = current_time.strftime("%A").upper()
-        full_date = f"{date_str}  {day_str}"
+        day_str = current_time.strftime("%a").upper()  # Short day name (MON, TUE, etc.)
+        full_date = f"{date_str} {day_str}"
 
-        # Get text width to right-align
-        date_bbox = draw.textbbox((0, 0), full_date, font=self.fonts["medium"])
+        # Use small font to ensure it fits
+        date_bbox = draw.textbbox((0, 0), full_date, font=self.fonts["small"])
         date_width = date_bbox[2] - date_bbox[0]
 
-        # Right-align the date to the left edge of the time
-        date_x = align_right_to_x - date_width + 45  # +45 to align with left of first digit
+        # Center the date in the box
+        date_x = x + (box_width - date_width) // 2
 
         draw.text((date_x, y), date_str,
-                  font=self.fonts["medium"], fill=self._get_color("primary"))
+                  font=self.fonts["small"], fill=self._get_color("primary"))
 
         # Day of week after date
-        date_only_bbox = draw.textbbox((0, 0), date_str + "  ", font=self.fonts["medium"])
+        date_only_bbox = draw.textbbox((0, 0), date_str + " ", font=self.fonts["small"])
         day_x = date_x + date_only_bbox[2] - date_only_bbox[0]
         draw.text((day_x, y), day_str,
-                  font=self.fonts["medium"], fill=self._get_color("accent"))
+                  font=self.fonts["small"], fill=self._get_color("accent"))
 
-    def draw_terrain_dots(self, draw, x, y, width, height):
-        """Draw gridded dot terrain with gradient density (dense at top, fading down)."""
-        terrain_color = self._get_color("success")  # Green
-
-        # Grid spacing
-        dot_spacing_x = 8
-        dot_spacing_y = 6
-
-        for row, py in enumerate(range(0, height, dot_spacing_y)):
-            # Calculate opacity/density based on row (denser at top)
-            density = 1.0 - (py / height) * 0.9  # Goes from 1.0 to 0.1
-
-            for px in range(0, width, dot_spacing_x):
-                # Offset every other row for more organic look
-                offset = (dot_spacing_x // 2) if row % 2 else 0
-                dot_x = x + px + offset
-
-                # Skip some dots based on density (probabilistic thinning)
-                random.seed(px * 1000 + py)  # Consistent randomness
-                if random.random() > density:
-                    continue
-
-                # Dot size decreases with depth
-                dot_size = max(1, int(2 * density))
-
-                if dot_x < x + width:
-                    draw.ellipse([dot_x, y + py, dot_x + dot_size, y + py + dot_size],
-                               fill=terrain_color)
-
-    def draw_daylight_arc(self, draw, x, y, width, height, current_time, terrain_height=60):
-        """Draw 24-hour sun arc with S-curves for night, no box, with terrain below."""
+    def draw_daylight_arc(self, draw, x, y, width, height, current_time):
+        """Draw 24-hour sun arc with S-curves for night, no box."""
         try:
             s = sun(self.location.observer, date=current_time.date(),
                    tzinfo=self.location.timezone)
@@ -213,9 +183,6 @@ class DashboardPage(Page):
             else:
                 night_progress = (time_frac - sunset_frac) / (1 - sunset_frac)
                 return -arc_height // 4 * math.sin(night_progress * math.pi / 2)
-
-        # Draw terrain dots below horizon
-        self.draw_terrain_dots(draw, x, horizon_y + 2, width, terrain_height)
 
         # Draw arc path
         arc_color = self._get_color("secondary")
@@ -261,20 +228,31 @@ class DashboardPage(Page):
                      sun_x + sun_radius, sun_y + sun_radius],
                     fill=sun_color)
 
-    def draw_events(self, draw, x, y, width, max_events=5):
-        """Draw upcoming calendar events with colored symbols."""
+    def draw_events(self, draw, x, y, width, height, max_events=5):
+        """Draw upcoming calendar events with colored symbols and line wrapping."""
         draw.text((x, y), "予定 / UPCOMING",
                   font=self.fonts["small"], fill=self._get_color("accent"))
 
         event_y = y + 22
-        line_height = 20
+        line_height = 18
+        padding = 5  # Padding from box edge
 
         if not self.events:
             draw.text((x, event_y), "No upcoming events",
                      font=self.fonts["small"], fill=self._get_color("secondary"))
             return
 
-        for i, event in enumerate(self.events[:max_events]):
+        # Calculate max title width (box width - symbol - time - padding)
+        title_start_x = x + 18 + 50  # symbol + time width
+        max_title_width = width - (title_start_x - x) - padding
+
+        events_shown = 0
+        max_y = y + height - line_height - 5  # Don't overflow box
+
+        for event in self.events:
+            if events_shown >= max_events or event_y > max_y:
+                break
+
             symbol = event.get("symbol", "●")
             time_str = event.get("time", "")
             title = event.get("title", "Untitled")
@@ -283,25 +261,53 @@ class DashboardPage(Page):
             # Get color for this calendar
             event_color = self.colors.get(color_name, self._get_color("primary"))
 
-            # Truncate title if needed
-            max_title_len = 30
-            if len(title) > max_title_len:
-                title = title[:max_title_len - 2] + ".."
-
             # Symbol in calendar color
             draw.text((x, event_y), symbol, font=self.fonts["small"], fill=event_color)
 
-            # Time
+            # Time (fixed width)
             time_x = x + 18
             draw.text((time_x, event_y), time_str,
                      font=self.fonts["small"], fill=self._get_color("secondary"))
 
-            # Title
-            title_x = time_x + 65
-            draw.text((title_x, event_y), title,
-                     font=self.fonts["small"], fill=self._get_color("primary"))
+            # Title with wrapping
+            title_x = title_start_x
 
-            event_y += line_height
+            # Calculate how many chars fit per line
+            char_width = 9  # Approximate width per character in small font
+            chars_per_line = max(10, int(max_title_width / char_width))
+
+            if len(title) <= chars_per_line:
+                # Single line
+                draw.text((title_x, event_y), title,
+                         font=self.fonts["small"], fill=self._get_color("primary"))
+                event_y += line_height
+            else:
+                # Need to wrap - break at word boundary if possible
+                words = title.split()
+                line = ""
+                first_line = True
+
+                for word in words:
+                    test_line = f"{line} {word}".strip() if line else word
+                    if len(test_line) <= chars_per_line:
+                        line = test_line
+                    else:
+                        if line:
+                            draw.text((title_x, event_y), line,
+                                     font=self.fonts["small"], fill=self._get_color("primary"))
+                            event_y += line_height
+                            if event_y > max_y:
+                                break
+                            first_line = False
+                        line = word
+
+                # Draw remaining text
+                if line and event_y <= max_y:
+                    draw.text((title_x, event_y), line,
+                             font=self.fonts["small"], fill=self._get_color("primary"))
+                    event_y += line_height
+
+            events_shown += 1
 
     def render(self, page_index=0, total_pages=1):
         """Render the dashboard page."""
@@ -322,17 +328,16 @@ class DashboardPage(Page):
 
         # Astral chart at bottom (no box, part of environment)
         arc_height = 70
-        terrain_height = 55
-        arc_y = self.height - arc_height - terrain_height - 10
+        arc_y = self.height - arc_height - 15
 
         # Boxes extend from content_top down to just above the arc
-        box_height = arc_y - content_top - 10
+        box_height = arc_y - content_top - 15
 
         # Time display (centered in left box)
-        time_left_edge = self.draw_time(draw, margin, content_top + 5, now, left_box_width)
+        self.draw_time(draw, margin, content_top + 5, now, left_box_width)
 
-        # Date display (below time, right-aligned to time's left edge)
-        self.draw_date(draw, margin, content_top + 100, now, time_left_edge)
+        # Date display (below time, centered in box, using small font)
+        self.draw_date(draw, margin, content_top + 105, now, left_box_width)
 
         # Border around time/date section
         self.draw_border_frame(draw, margin - 5, content_top - 25, left_box_width + 10, box_height)
@@ -340,11 +345,10 @@ class DashboardPage(Page):
         # Events section (right column, same height as time/date box)
         events_x = divider_x + 5
         events_y = content_top - 20
-        max_events = (box_height - 30) // 20  # Calculate how many events fit
-        self.draw_events(draw, events_x, events_y, right_box_width, max_events=max_events)
+        self.draw_events(draw, events_x, events_y, right_box_width, box_height, max_events=15)
         self.draw_border_frame(draw, events_x - 10, content_top - 25, right_box_width + 15, box_height)
 
-        # Daylight arc at bottom (no box, with terrain)
-        self.draw_daylight_arc(draw, margin, arc_y, self.width - (margin * 2), arc_height, now, terrain_height)
+        # Daylight arc at bottom (no box, no terrain)
+        self.draw_daylight_arc(draw, margin, arc_y, self.width - (margin * 2), arc_height, now)
 
         return image

@@ -4,6 +4,7 @@ Time, date, daylight arc, upcoming events
 """
 
 import math
+import random
 from datetime import datetime, timedelta
 from PIL import ImageDraw
 
@@ -97,40 +98,87 @@ class DashboardPage(Page):
 
         return w + 12
 
-    def draw_time(self, draw, x, y, current_time):
-        """Draw large segmented time display."""
+    def draw_time(self, draw, x, y, current_time, box_width):
+        """Draw large segmented time display, centered in box."""
         time_str = current_time.strftime("%H:%M")
 
-        # Japanese label
-        draw.text((x, y - 22), config.LABELS["time"],
+        # Calculate total width of time display to center it
+        # Each digit is ~size//2 + 12, colon is ~size//4 + 8
+        digit_width = 90 // 2 + 12  # 57
+        colon_width = 90 // 4 + 8   # 30.5
+        total_time_width = (4 * digit_width) + colon_width  # 4 digits + 1 colon
+
+        # Center the time in the box
+        start_x = x + (box_width - total_time_width) // 2
+
+        # Japanese label (centered above time)
+        label_bbox = draw.textbbox((0, 0), config.LABELS["time"], font=self.fonts["jp"])
+        label_width = label_bbox[2] - label_bbox[0]
+        draw.text((x + (box_width - label_width) // 2, y - 22), config.LABELS["time"],
                   font=self.fonts["jp"], fill=self._get_color("secondary"))
 
         # Draw segmented digits (larger size)
-        offset_x = x
+        offset_x = start_x
         for char in time_str:
             width = self.draw_segmented_digit(draw, offset_x, y, char, size=90, thickness=12)
             offset_x += width
 
-        # Seconds
-        seconds = current_time.strftime(":%S")
-        draw.text((offset_x + 8, y + 55), seconds,
-                  font=self.fonts["medium"], fill=self._get_color("primary"))
+        # Return the left edge of time for date alignment
+        return start_x
 
-    def draw_date(self, draw, x, y, current_time):
-        """Draw date display."""
-        draw.text((x, y), config.LABELS["date"],
-                  font=self.fonts["jp"], fill=self._get_color("secondary"))
-
+    def draw_date(self, draw, x, y, current_time, align_right_to_x):
+        """Draw date display, right-aligned to the left edge of the time."""
         date_str = current_time.strftime("%Y.%m.%d")
         day_str = current_time.strftime("%A").upper()
+        full_date = f"{date_str}  {day_str}"
 
-        draw.text((x, y + 18), date_str,
+        # Get text width to right-align
+        date_bbox = draw.textbbox((0, 0), full_date, font=self.fonts["medium"])
+        date_width = date_bbox[2] - date_bbox[0]
+
+        # Right-align the date to the left edge of the time
+        date_x = align_right_to_x - date_width + 45  # +45 to align with left of first digit
+
+        draw.text((date_x, y), date_str,
                   font=self.fonts["medium"], fill=self._get_color("primary"))
-        draw.text((x + 160, y + 18), day_str,
+
+        # Day of week after date
+        date_only_bbox = draw.textbbox((0, 0), date_str + "  ", font=self.fonts["medium"])
+        day_x = date_x + date_only_bbox[2] - date_only_bbox[0]
+        draw.text((day_x, y), day_str,
                   font=self.fonts["medium"], fill=self._get_color("accent"))
 
-    def draw_daylight_arc(self, draw, x, y, width, height, current_time):
-        """Draw 24-hour sun arc with S-curves for night."""
+    def draw_terrain_dots(self, draw, x, y, width, height):
+        """Draw gridded dot terrain with gradient density (dense at top, fading down)."""
+        terrain_color = self._get_color("success")  # Green
+
+        # Grid spacing
+        dot_spacing_x = 8
+        dot_spacing_y = 6
+
+        for row, py in enumerate(range(0, height, dot_spacing_y)):
+            # Calculate opacity/density based on row (denser at top)
+            density = 1.0 - (py / height) * 0.9  # Goes from 1.0 to 0.1
+
+            for px in range(0, width, dot_spacing_x):
+                # Offset every other row for more organic look
+                offset = (dot_spacing_x // 2) if row % 2 else 0
+                dot_x = x + px + offset
+
+                # Skip some dots based on density (probabilistic thinning)
+                random.seed(px * 1000 + py)  # Consistent randomness
+                if random.random() > density:
+                    continue
+
+                # Dot size decreases with depth
+                dot_size = max(1, int(2 * density))
+
+                if dot_x < x + width:
+                    draw.ellipse([dot_x, y + py, dot_x + dot_size, y + py + dot_size],
+                               fill=terrain_color)
+
+    def draw_daylight_arc(self, draw, x, y, width, height, current_time, terrain_height=60):
+        """Draw 24-hour sun arc with S-curves for night, no box, with terrain below."""
         try:
             s = sun(self.location.observer, date=current_time.date(),
                    tzinfo=self.location.timezone)
@@ -141,11 +189,8 @@ class DashboardPage(Page):
                      font=self.fonts["small"], fill=self._get_color("accent"))
             return
 
-        draw.text((x, y), config.LABELS["daylight"],
-                  font=self.fonts["jp"], fill=self._get_color("secondary"))
-
-        arc_y = y + 22
-        arc_height = height - 45
+        arc_y = y
+        arc_height = height - 25
 
         # Time calculations
         midnight = current_time.replace(hour=0, minute=0, second=0, microsecond=0)
@@ -169,6 +214,9 @@ class DashboardPage(Page):
                 night_progress = (time_frac - sunset_frac) / (1 - sunset_frac)
                 return -arc_height // 4 * math.sin(night_progress * math.pi / 2)
 
+        # Draw terrain dots below horizon
+        self.draw_terrain_dots(draw, x, horizon_y + 2, width, terrain_height)
+
         # Draw arc path
         arc_color = self._get_color("secondary")
         prev_point = None
@@ -186,18 +234,18 @@ class DashboardPage(Page):
 
         # Sunrise line and label
         sunrise_x = x + int(sunrise_frac * width)
-        draw.line([(sunrise_x, arc_y), (sunrise_x, horizon_y + arc_height // 4)],
+        draw.line([(sunrise_x, arc_y), (sunrise_x, horizon_y + 15)],
                  fill=self._get_color("warning"), width=1)
         sunrise_str = sunrise.strftime("%H:%M")
-        draw.text((sunrise_x - 42, horizon_y + arc_height // 4 + 2), sunrise_str,
+        draw.text((sunrise_x - 15, arc_y - 15), sunrise_str,
                   font=self.fonts["small"], fill=self._get_color("warning"))
 
         # Sunset line and label
         sunset_x = x + int(sunset_frac * width)
-        draw.line([(sunset_x, arc_y), (sunset_x, horizon_y + arc_height // 4)],
+        draw.line([(sunset_x, arc_y), (sunset_x, horizon_y + 15)],
                  fill=self._get_color("accent"), width=1)
         sunset_str = sunset.strftime("%H:%M")
-        draw.text((sunset_x + 5, horizon_y + arc_height // 4 + 2), sunset_str,
+        draw.text((sunset_x - 15, arc_y - 15), sunset_str,
                   font=self.fonts["small"], fill=self._get_color("accent"))
 
         # Current sun position
@@ -267,24 +315,36 @@ class DashboardPage(Page):
         margin = 20
         content_top = 45
 
-        # Time display (large, top-left)
-        self.draw_time(draw, margin, content_top, now)
+        # Layout: Two equal columns with divider in the middle
+        divider_x = self.width // 2
+        left_box_width = divider_x - margin - 5
+        right_box_width = self.width - divider_x - margin - 5
 
-        # Date display (below time)
-        self.draw_date(draw, margin, content_top + 115, now)
+        # Astral chart at bottom (no box, part of environment)
+        arc_height = 70
+        terrain_height = 55
+        arc_y = self.height - arc_height - terrain_height - 10
+
+        # Boxes extend from content_top down to just above the arc
+        box_height = arc_y - content_top - 10
+
+        # Time display (centered in left box)
+        time_left_edge = self.draw_time(draw, margin, content_top + 5, now, left_box_width)
+
+        # Date display (below time, right-aligned to time's left edge)
+        self.draw_date(draw, margin, content_top + 100, now, time_left_edge)
 
         # Border around time/date section
-        self.draw_border_frame(draw, margin - 5, content_top - 25, 340, 160)
+        self.draw_border_frame(draw, margin - 5, content_top - 25, left_box_width + 10, box_height)
 
-        # Daylight arc (full width, middle)
-        arc_y = content_top + 165
-        self.draw_daylight_arc(draw, margin, arc_y, self.width - (margin * 2), 95, now)
-        self.draw_border_frame(draw, margin - 5, arc_y - 5, self.width - (margin * 2) + 10, 100)
+        # Events section (right column, same height as time/date box)
+        events_x = divider_x + 5
+        events_y = content_top - 20
+        max_events = (box_height - 30) // 20  # Calculate how many events fit
+        self.draw_events(draw, events_x, events_y, right_box_width, max_events=max_events)
+        self.draw_border_frame(draw, events_x - 10, content_top - 25, right_box_width + 15, box_height)
 
-        # Events section (right side of screen, next to time)
-        events_x = 380
-        events_y = content_top - 25
-        self.draw_events(draw, events_x, events_y, self.width - events_x - margin, max_events=6)
-        self.draw_border_frame(draw, events_x - 10, events_y - 5, self.width - events_x - margin + 15, 155)
+        # Daylight arc at bottom (no box, with terrain)
+        self.draw_daylight_arc(draw, margin, arc_y, self.width - (margin * 2), arc_height, now, terrain_height)
 
         return image

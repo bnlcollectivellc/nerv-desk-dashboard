@@ -1,0 +1,14 @@
+[Unit]
+Description=NERV Dashboard for Inky Impression
+After=network.target
+
+[Service]
+Type=simple
+User=leonardopham00
+WorkingDirectory=/home/leonardopham00/nerv-desk-dashboard
+ExecStart=/usr/bin/python3 /home/leonardopham00/nerv-desk-dashboard/main.py
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target

@@ -1,6 +1,6 @@
 """
 Todos Page - Notion integration
-Today's tasks and overdue items
+Today's tasks, Non-Negotiables, and Goals
 """
 
 from datetime import datetime
@@ -9,11 +9,34 @@ import config
 
 
 class TodosPage(Page):
-    """Todo list page with Notion integration."""
+    """Todo list page with Notion integration, Non-Negotiables, and Goals."""
 
     name = "todos"
     title = "TASK LIST"
     title_jp = "タスク一覧"
+
+    # Static content
+    NON_NEGOTIABLES = [
+        "Gym",
+        "Meditate",
+        "Work",
+        "Shallows",
+        "Sunset",
+        "Read",
+        "Dir.Img",
+    ]
+
+    GOALS = [
+        "Kind, intentional, sympathetic, caring life",
+        "$250k/yr",
+        "Deep Relationships",
+        "Consistent Physical Health",
+        "Progressive Mental Health",
+        "Expansive Spiritual Health",
+        "Travel",
+    ]
+
+    THEME = "THEME: Intentional, Slow, Present"
 
     def __init__(self, width, height, fonts):
         super().__init__(width, height, fonts)
@@ -39,6 +62,12 @@ class TodosPage(Page):
             draw.line([(x + 3, y + size//2), (x + size//2, y + size - 3)], fill=color, width=2)
             draw.line([(x + size//2, y + size - 3), (x + size - 3, y + 3)], fill=color, width=2)
 
+    def draw_bullet(self, draw, x, y, color=None):
+        """Draw a bullet point."""
+        if color is None:
+            color = self._get_color("primary")
+        draw.ellipse([x, y + 4, x + 6, y + 10], fill=color)
+
     def draw_todo_item(self, draw, x, y, todo, max_width=280):
         """Draw a single todo item with checkbox, title, and optional due indicator."""
         title = todo.get("title", "Untitled")
@@ -50,7 +79,7 @@ class TodosPage(Page):
         self.draw_checkbox(draw, x, y + 1, done, is_overdue, size=14)
 
         # Title - truncate if needed
-        max_chars = 38
+        max_chars = 50
         if len(title) > max_chars:
             title = title[:max_chars - 2] + ".."
 
@@ -70,6 +99,45 @@ class TodosPage(Page):
             draw.text((x + max_width - 40, y), due_str,
                      font=self.fonts["small"], fill=self._get_color("accent"))
 
+    def draw_non_negotiables(self, draw, x, y, width, height):
+        """Draw the Non-Negotiables box."""
+        # Header
+        draw.text((x, y), "必須 / NON-NEGOTIABLES",
+                  font=self.fonts["small"], fill=self._get_color("accent"))
+
+        # Items
+        item_y = y + 22
+        line_height = 18
+
+        for item in self.NON_NEGOTIABLES:
+            self.draw_bullet(draw, x, item_y, self._get_color("warning"))
+            draw.text((x + 12, item_y), item,
+                     font=self.fonts["small"], fill=self._get_color("primary"))
+            item_y += line_height
+
+    def draw_goals(self, draw, x, y, width, height):
+        """Draw the Goals box."""
+        # Header
+        draw.text((x, y), "目標 / GOALS",
+                  font=self.fonts["small"], fill=self._get_color("accent"))
+
+        # Items
+        item_y = y + 22
+        line_height = 18
+
+        for i, goal in enumerate(self.GOALS, 1):
+            # Number prefix
+            draw.text((x, item_y), f"{i}.",
+                     font=self.fonts["small"], fill=self._get_color("warning"))
+            draw.text((x + 18, item_y), goal,
+                     font=self.fonts["small"], fill=self._get_color("primary"))
+            item_y += line_height
+
+        # Theme at bottom
+        item_y += 8
+        draw.text((x, item_y), f"*{self.THEME}",
+                 font=self.fonts["small"], fill=self._get_color("success"))
+
     def render(self, page_index=0, total_pages=1):
         """Render the todos page."""
         image, draw = super().render(page_index, total_pages)
@@ -81,13 +149,18 @@ class TodosPage(Page):
         if not self._last_fetch:
             self.refresh_todos()
 
+        # Layout: Top half = Todos, Bottom half = Non-Negotiables + Goals side by side
+        half_height = (self.height - content_top - 20) // 2
+        bottom_half_y = content_top + half_height + 10
+
+        # === TOP HALF: TODOS BOX ===
         # Date header
         now = datetime.now()
         date_str = now.strftime("%A, %B %d").upper()
         draw.text((margin, content_top), date_str,
                   font=self.fonts["medium"], fill=self._get_color("primary"))
 
-        # Section divider
+        # Section label
         draw.text((margin, content_top + 28), "今日のタスク / TODAY'S TASKS",
                   font=self.fonts["small"], fill=self._get_color("accent"))
 
@@ -100,37 +173,44 @@ class TodosPage(Page):
 
         # Todo list
         item_y = content_top + 55
-        line_height = 24
-        max_items = 14  # Fit on screen
+        line_height = 20
+        max_items = (half_height - 70) // line_height
 
         if not self.todos:
-            # No todos message
             draw.text((margin + 22, item_y), "No tasks due today",
-                     font=self.fonts["small"], fill=self._get_color("secondary"))
-            draw.text((margin + 22, item_y + line_height),
-                     "Check secrets.py for Notion setup",
                      font=self.fonts["small"], fill=self._get_color("secondary"))
         else:
             for i, todo in enumerate(self.todos[:max_items]):
                 self.draw_todo_item(draw, margin, item_y, todo, max_width=self.width - margin * 2)
                 item_y += line_height
 
-            # Overflow indicator
             if len(self.todos) > max_items:
                 remaining = len(self.todos) - max_items
                 draw.text((margin, item_y),
                          f"+ {remaining} more tasks...",
                          font=self.fonts["small"], fill=self._get_color("secondary"))
 
-        # Border around content area
+        # Todos box border
         self.draw_border_frame(draw, margin - 5, content_top - 5,
-                              self.width - margin * 2 + 10, self.height - content_top - 25)
+                              self.width - margin * 2 + 10, half_height)
 
-        # Last updated timestamp at bottom
-        if self._last_fetch:
-            updated_str = f"Updated: {self._last_fetch.strftime('%H:%M')}"
-            draw.text((self.width - margin - 100, self.height - 35),
-                     updated_str, font=self.fonts["small"],
-                     fill=self._get_color("secondary"))
+        # === BOTTOM HALF: NON-NEGOTIABLES + GOALS ===
+        # Calculate Non-Negotiables width based on longest item
+        max_nn_width = 0
+        for item in self.NON_NEGOTIABLES:
+            bbox = draw.textbbox((0, 0), item, font=self.fonts["small"])
+            max_nn_width = max(max_nn_width, bbox[2] - bbox[0])
+        nn_box_width = max_nn_width + 40  # Add padding for bullet and margins
+
+        goals_box_x = margin + nn_box_width + 15
+        goals_box_width = self.width - goals_box_x - margin + 5
+
+        # Non-Negotiables box (left)
+        self.draw_non_negotiables(draw, margin, bottom_half_y, nn_box_width, half_height - 15)
+        self.draw_border_frame(draw, margin - 5, bottom_half_y - 5, nn_box_width, half_height - 15)
+
+        # Goals box (right)
+        self.draw_goals(draw, goals_box_x, bottom_half_y, goals_box_width, half_height - 15)
+        self.draw_border_frame(draw, goals_box_x - 5, bottom_half_y - 5, goals_box_width, half_height - 15)
 
         return image

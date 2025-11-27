@@ -151,7 +151,7 @@ class TodosPage(Page):
         image, draw = super().render(page_index, total_pages)
 
         margin = 20
-        content_top = 45
+        content_top = 35  # Reduced since no hazard stripes
 
         # Fetch todos if needed (on first render or refresh)
         if not self._last_fetch:

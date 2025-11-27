@@ -319,7 +319,7 @@ class DashboardPage(Page):
             self.refresh_events()
 
         margin = 20
-        content_top = 45
+        content_top = 35  # Reduced since no hazard stripes
 
         # Layout: Two equal columns with divider in the middle
         divider_x = self.width // 2

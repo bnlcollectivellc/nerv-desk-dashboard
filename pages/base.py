@@ -67,16 +67,13 @@ class Page:
             )
 
     def draw_header(self, draw, page_index, total_pages):
-        """Draw NERV-style header with hazard stripes and page indicator."""
-        # Top hazard stripe
-        self.draw_hazard_stripes(draw, 0, 0, self.width, 12)
-
+        """Draw NERV-style header with page indicator."""
         # NERV logo
-        draw.text((15, 16), "NERV", font=self.fonts["medium"],
+        draw.text((15, 8), "NERV", font=self.fonts["medium"],
                   fill=self._get_color("accent"))
 
         # Page title
-        draw.text((85, 20), self.title, font=self.fonts["small"],
+        draw.text((85, 12), self.title, font=self.fonts["small"],
                   fill=self._get_color("primary"))
 
         # Page indicator dots (right side)
@@ -87,7 +84,7 @@ class Page:
 
         for i in range(total_pages):
             cx = start_x + (i * dot_spacing)
-            cy = 24
+            cy = 16
             if i == page_index:
                 # Current page - filled
                 draw.ellipse([cx - dot_radius, cy - dot_radius,
@@ -100,8 +97,8 @@ class Page:
                             outline=self._get_color("primary"), width=1)
 
     def draw_footer(self, draw):
-        """Draw bottom hazard stripe."""
-        self.draw_hazard_stripes(draw, 0, self.height - 12, self.width, 12)
+        """Draw footer (placeholder, no hazard stripes)."""
+        pass
 
     def render(self, page_index=0, total_pages=1):
         """

@@ -18,7 +18,7 @@ from PIL import ImageFont
 import config
 
 # Import pages
-from pages import DashboardPage, TodosPage, ExperimentalPage
+from pages import DashboardPage, TodosPage, ExperimentalPage, SatellitePage
 
 # Try to import inky, fall back to preview mode if not available
 try:
@@ -58,6 +58,7 @@ class NERVDashboard:
         self.pages = {
             "dashboard": DashboardPage(self.width, self.height, self.fonts),
             "todos": TodosPage(self.width, self.height, self.fonts),
+            "satellite": SatellitePage(self.width, self.height, self.fonts),
             "experimental": ExperimentalPage(self.width, self.height, self.fonts),
         }
 

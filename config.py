@@ -41,7 +41,7 @@ THEME = {
 UPDATE_INTERVAL = 300  # 5 minutes
 
 # Pages configuration
-PAGES = ["dashboard", "todos", "experimental"]
+PAGES = ["dashboard", "todos", "satellite", "experimental"]
 DEFAULT_PAGE = "dashboard"
 
 # Button mapping (active low, accent on press)

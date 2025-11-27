@@ -77,47 +77,55 @@ class SatellitePage(Page):
             return None
 
     def draw_reticle(self, draw, center_x, center_y, size):
-        """Draw tactical reticle overlay in orange."""
+        """Draw tactical reticle overlay with black outline for contrast."""
         orange = self._get_color("accent")  # Orange/red accent color
+        black = self.colors["black"]  # Black outline for contrast
+
+        # Line widths (doubled from original)
+        main_width = 2
+        outline_width = 4  # Black outline is thicker
 
         # Main crosshair lines (extending from center)
         line_length = size // 3
         gap = 15  # Gap at center
 
+        # Helper to draw line with black outline
+        def draw_contrasted_line(p1, p2, width=main_width):
+            draw.line([p1, p2], fill=black, width=width + 2)
+            draw.line([p1, p2], fill=orange, width=width)
+
         # Horizontal lines
-        draw.line([(center_x - line_length, center_y), (center_x - gap, center_y)],
-                  fill=orange, width=1)
-        draw.line([(center_x + gap, center_y), (center_x + line_length, center_y)],
-                  fill=orange, width=1)
+        draw_contrasted_line((center_x - line_length, center_y), (center_x - gap, center_y))
+        draw_contrasted_line((center_x + gap, center_y), (center_x + line_length, center_y))
 
         # Vertical lines
-        draw.line([(center_x, center_y - line_length), (center_x, center_y - gap)],
-                  fill=orange, width=1)
-        draw.line([(center_x, center_y + gap), (center_x, center_y + line_length)],
-                  fill=orange, width=1)
+        draw_contrasted_line((center_x, center_y - line_length), (center_x, center_y - gap))
+        draw_contrasted_line((center_x, center_y + gap), (center_x, center_y + line_length))
 
-        # Center dot
-        dot_radius = 2
+        # Center dot with outline
+        dot_radius = 3
+        draw.ellipse([center_x - dot_radius - 1, center_y - dot_radius - 1,
+                     center_x + dot_radius + 1, center_y + dot_radius + 1], fill=black)
         draw.ellipse([center_x - dot_radius, center_y - dot_radius,
                      center_x + dot_radius, center_y + dot_radius], fill=orange)
 
         # Tick marks on crosshairs (mil dots style)
         tick_spacing = 20
-        tick_size = 4
+        tick_size = 5
 
         for i in range(1, 6):
             offset = gap + (i * tick_spacing)
             if offset < line_length:
                 # Horizontal ticks
-                draw.line([(center_x - offset, center_y - tick_size),
-                          (center_x - offset, center_y + tick_size)], fill=orange, width=1)
-                draw.line([(center_x + offset, center_y - tick_size),
-                          (center_x + offset, center_y + tick_size)], fill=orange, width=1)
+                draw_contrasted_line((center_x - offset, center_y - tick_size),
+                                    (center_x - offset, center_y + tick_size))
+                draw_contrasted_line((center_x + offset, center_y - tick_size),
+                                    (center_x + offset, center_y + tick_size))
                 # Vertical ticks
-                draw.line([(center_x - tick_size, center_y - offset),
-                          (center_x + tick_size, center_y - offset)], fill=orange, width=1)
-                draw.line([(center_x - tick_size, center_y + offset),
-                          (center_x + tick_size, center_y + offset)], fill=orange, width=1)
+                draw_contrasted_line((center_x - tick_size, center_y - offset),
+                                    (center_x + tick_size, center_y - offset))
+                draw_contrasted_line((center_x - tick_size, center_y + offset),
+                                    (center_x + tick_size, center_y + offset))
 
         # Corner brackets
         bracket_size = 30
@@ -131,34 +139,37 @@ class SatellitePage(Page):
         ]
 
         # Top-left corner
-        draw.line([(corners[0][0], corners[0][1]),
-                  (corners[0][0] + bracket_size, corners[0][1])], fill=orange, width=1)
-        draw.line([(corners[0][0], corners[0][1]),
-                  (corners[0][0], corners[0][1] + bracket_size)], fill=orange, width=1)
+        draw_contrasted_line((corners[0][0], corners[0][1]),
+                            (corners[0][0] + bracket_size, corners[0][1]))
+        draw_contrasted_line((corners[0][0], corners[0][1]),
+                            (corners[0][0], corners[0][1] + bracket_size))
 
         # Top-right corner
-        draw.line([(corners[1][0], corners[1][1]),
-                  (corners[1][0] - bracket_size, corners[1][1])], fill=orange, width=1)
-        draw.line([(corners[1][0], corners[1][1]),
-                  (corners[1][0], corners[1][1] + bracket_size)], fill=orange, width=1)
+        draw_contrasted_line((corners[1][0], corners[1][1]),
+                            (corners[1][0] - bracket_size, corners[1][1]))
+        draw_contrasted_line((corners[1][0], corners[1][1]),
+                            (corners[1][0], corners[1][1] + bracket_size))
 
         # Bottom-left corner
-        draw.line([(corners[2][0], corners[2][1]),
-                  (corners[2][0] + bracket_size, corners[2][1])], fill=orange, width=1)
-        draw.line([(corners[2][0], corners[2][1]),
-                  (corners[2][0], corners[2][1] - bracket_size)], fill=orange, width=1)
+        draw_contrasted_line((corners[2][0], corners[2][1]),
+                            (corners[2][0] + bracket_size, corners[2][1]))
+        draw_contrasted_line((corners[2][0], corners[2][1]),
+                            (corners[2][0], corners[2][1] - bracket_size))
 
         # Bottom-right corner
-        draw.line([(corners[3][0], corners[3][1]),
-                  (corners[3][0] - bracket_size, corners[3][1])], fill=orange, width=1)
-        draw.line([(corners[3][0], corners[3][1]),
-                  (corners[3][0], corners[3][1] - bracket_size)], fill=orange, width=1)
+        draw_contrasted_line((corners[3][0], corners[3][1]),
+                            (corners[3][0] - bracket_size, corners[3][1]))
+        draw_contrasted_line((corners[3][0], corners[3][1]),
+                            (corners[3][0], corners[3][1] - bracket_size))
 
-        # Range circle
+        # Range circle with outline
         circle_radius = size // 5
+        draw.ellipse([center_x - circle_radius - 1, center_y - circle_radius - 1,
+                     center_x + circle_radius + 1, center_y + circle_radius + 1],
+                    outline=black, width=outline_width)
         draw.ellipse([center_x - circle_radius, center_y - circle_radius,
                      center_x + circle_radius, center_y + circle_radius],
-                    outline=orange, width=1)
+                    outline=orange, width=main_width)
 
     def draw_data_overlay(self, draw, image_data, x, y):
         """Draw data information overlay in bottom-right, right-aligned."""
@@ -269,12 +280,18 @@ class SatellitePage(Page):
                 # Need to recreate draw object after paste
                 draw = ImageDraw.Draw(image)
 
-        # Draw thin border box (25px from edge)
+        # Draw border box with contrast (25px from edge)
         border_margin = 25
         orange = self._get_color("accent")
+        black = self.colors["black"]
+
+        # Draw black outline first, then orange on top
+        draw.rectangle([border_margin - 1, border_margin - 1,
+                       self.width - border_margin + 1, self.height - border_margin + 1],
+                      outline=black, width=3)
         draw.rectangle([border_margin, border_margin,
                        self.width - border_margin, self.height - border_margin],
-                      outline=orange, width=1)
+                      outline=orange, width=2)
 
         # Draw reticle at center
         center_x = self.width // 2

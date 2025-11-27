@@ -129,13 +129,13 @@ class CalendarClient:
         all_events.sort(key=sort_key)
         return all_events
 
-    def get_events_for_display(self, max_events=6):
+    def get_events_for_display(self, max_events=20):
         """Get events formatted for dashboard display."""
-        events = self.get_events(days_ahead=2)
+        events = self.get_events(days_ahead=14)  # Look 2 weeks ahead
         return events[:max_events]
 
 
-def get_calendar_events(max_events=6):
+def get_calendar_events(max_events=20):
     """Fetch calendar events using config from secrets.py."""
     try:
         from secrets import CALENDARS
@@ -147,5 +147,8 @@ def get_calendar_events(max_events=6):
         print("No calendars configured in secrets.py")
         return []
 
+    print(f"Fetching from {len(CALENDARS)} calendars...")
     client = CalendarClient(CALENDARS)
-    return client.get_events_for_display(max_events)
+    events = client.get_events_for_display(max_events)
+    print(f"Got {len(events)} events")
+    return events

@@ -330,44 +330,47 @@ class DashboardPage(Page):
         if not self._last_fetch:
             self.refresh_events()
 
-        margin = 20
-        content_top = 35  # Reduced since no hazard stripes
-
-        # Layout: Two equal columns with divider in the middle
-        divider_x = self.width // 2
-        left_box_width = divider_x - margin - 5
-        right_box_width = self.width - divider_x - margin - 5
+        # Uniform spacing constants
+        margin = 15
+        gap = 8  # Uniform gap between all boxes
+        content_top = 35
 
         # Astral chart at bottom (no box, part of environment)
-        arc_height = 70
-        arc_y = self.height - arc_height - 15
+        arc_height = 65
+        arc_y = self.height - arc_height - 5
 
-        # Total height for left column boxes
-        total_left_height = arc_y - content_top - 15
+        # Calculate available height for boxes
+        available_height = arc_y - content_top - gap
 
-        # Split left column into two boxes: Time+Date (top) and Placeholder (bottom)
-        time_box_height = (total_left_height // 2) - 5
-        placeholder_box_height = total_left_height - time_box_height - 10
-        placeholder_y = content_top + time_box_height + 5
+        # Layout: Two columns with uniform gap
+        col_gap = gap
+        left_col_width = (self.width - margin * 2 - col_gap) // 2
+        right_col_width = left_col_width
+        right_col_x = margin + left_col_width + col_gap
 
-        # Time display (centered in top left box)
-        self.draw_time(draw, margin, content_top, now, left_box_width)
+        # Left column: split into time+date box (top) and placeholder box (bottom)
+        left_time_box_height = (available_height - gap) // 2
+        left_placeholder_height = available_height - left_time_box_height - gap
+        placeholder_y = content_top + left_time_box_height + gap
 
-        # Date display (below time, centered, medium font)
-        self.draw_date(draw, margin, content_top + 95, now, left_box_width)
+        # === LEFT COLUMN: TIME+DATE BOX ===
+        self.draw_border_frame(draw, margin, content_top, left_col_width, left_time_box_height)
 
-        # Border around time/date section (top left)
-        self.draw_border_frame(draw, margin - 5, content_top - 25, left_box_width + 10, time_box_height)
+        # Time display (centered in box)
+        time_y = content_top + 15
+        self.draw_time(draw, margin + 5, time_y, now, left_col_width - 10)
 
-        # Placeholder module (bottom left)
-        self.draw_placeholder_module(draw, margin, placeholder_y, left_box_width, placeholder_box_height - 20)
-        self.draw_border_frame(draw, margin - 5, placeholder_y - 5, left_box_width + 10, placeholder_box_height)
+        # Date display (below time)
+        date_y = content_top + left_time_box_height - 35
+        self.draw_date(draw, margin + 5, date_y, now, left_col_width - 10)
 
-        # Events section (right column, full height)
-        events_x = divider_x + 5
-        events_y = content_top - 20
-        self.draw_events(draw, events_x, events_y, right_box_width, total_left_height)
-        self.draw_border_frame(draw, events_x - 10, content_top - 25, right_box_width + 15, total_left_height)
+        # === LEFT COLUMN: PLACEHOLDER MODULE BOX ===
+        self.draw_border_frame(draw, margin, placeholder_y, left_col_width, left_placeholder_height)
+        self.draw_placeholder_module(draw, margin + 10, placeholder_y + 10, left_col_width - 20, left_placeholder_height - 20)
+
+        # === RIGHT COLUMN: EVENTS BOX (full height) ===
+        self.draw_border_frame(draw, right_col_x, content_top, right_col_width, available_height)
+        self.draw_events(draw, right_col_x + 10, content_top + 5, right_col_width - 20, available_height - 10)
 
         # Daylight arc at bottom (no box, no terrain)
         self.draw_daylight_arc(draw, margin, arc_y, self.width - (margin * 2), arc_height, now)

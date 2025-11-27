@@ -126,26 +126,44 @@ class DashboardPage(Page):
         return start_x
 
     def draw_date(self, draw, x, y, current_time, box_width):
-        """Draw date display using small font, centered in box."""
+        """Draw date display using medium font (25% larger), centered in box."""
         date_str = current_time.strftime("%Y.%m.%d")
         day_str = current_time.strftime("%a").upper()  # Short day name (MON, TUE, etc.)
         full_date = f"{date_str} {day_str}"
 
-        # Use small font to ensure it fits
-        date_bbox = draw.textbbox((0, 0), full_date, font=self.fonts["small"])
+        # Use medium font (25% larger than small)
+        date_bbox = draw.textbbox((0, 0), full_date, font=self.fonts["medium"])
         date_width = date_bbox[2] - date_bbox[0]
 
         # Center the date in the box
         date_x = x + (box_width - date_width) // 2
 
         draw.text((date_x, y), date_str,
-                  font=self.fonts["small"], fill=self._get_color("primary"))
+                  font=self.fonts["medium"], fill=self._get_color("primary"))
 
         # Day of week after date
-        date_only_bbox = draw.textbbox((0, 0), date_str + " ", font=self.fonts["small"])
+        date_only_bbox = draw.textbbox((0, 0), date_str + " ", font=self.fonts["medium"])
         day_x = date_x + date_only_bbox[2] - date_only_bbox[0]
         draw.text((day_x, y), day_str,
+                  font=self.fonts["medium"], fill=self._get_color("accent"))
+
+    def draw_placeholder_module(self, draw, x, y, width, height):
+        """Draw placeholder for future module (word of day, verse, etc.)."""
+        # Header
+        draw.text((x, y), "モジュール / MODULE",
                   font=self.fonts["small"], fill=self._get_color("accent"))
+
+        # Centered N/A placeholder
+        na_text = "N/A"
+        na_bbox = draw.textbbox((0, 0), na_text, font=self.fonts["medium"])
+        na_width = na_bbox[2] - na_bbox[0]
+        na_height = na_bbox[3] - na_bbox[1]
+
+        na_x = x + (width - na_width) // 2
+        na_y = y + (height - na_height) // 2
+
+        draw.text((na_x, na_y), na_text,
+                 font=self.fonts["medium"], fill=self._get_color("secondary"))
 
     def draw_daylight_arc(self, draw, x, y, width, height, current_time):
         """Draw 24-hour sun arc with S-curves for night, no box."""
@@ -228,86 +246,80 @@ class DashboardPage(Page):
                      sun_x + sun_radius, sun_y + sun_radius],
                     fill=sun_color)
 
-    def draw_events(self, draw, x, y, width, height, max_events=5):
-        """Draw upcoming calendar events with colored symbols and line wrapping."""
+    def draw_events(self, draw, x, y, width, height):
+        """Draw upcoming calendar events grouped by day with date headers."""
         draw.text((x, y), "予定 / UPCOMING",
                   font=self.fonts["small"], fill=self._get_color("accent"))
 
-        event_y = y + 22
-        line_height = 18
-        padding = 5  # Padding from box edge
+        event_y = y + 20
+        line_height = 16
+        header_height = 18
+        padding = 8
+        max_y = y + height - padding
 
         if not self.events:
             draw.text((x, event_y), "No upcoming events",
                      font=self.fonts["small"], fill=self._get_color("secondary"))
             return
 
-        # Calculate max title width (box width - symbol - time - padding)
-        title_start_x = x + 18 + 50  # symbol + time width
-        max_title_width = width - (title_start_x - x) - padding
-
-        events_shown = 0
-        max_y = y + height - line_height - 5  # Don't overflow box
-
+        # Group events by date
+        from collections import defaultdict
+        events_by_date = defaultdict(list)
         for event in self.events:
-            if events_shown >= max_events or event_y > max_y:
+            event_date = event.get("start")
+            if event_date:
+                date_key = event_date.strftime("%Y-%m-%d")
+                events_by_date[date_key].append(event)
+
+        # Sort dates
+        sorted_dates = sorted(events_by_date.keys())
+
+        # Calculate max title chars
+        char_width = 9
+        max_title_chars = max(10, (width - 70) // char_width)
+
+        for date_key in sorted_dates:
+            if event_y > max_y:
                 break
 
-            symbol = event.get("symbol", "●")
-            time_str = event.get("time", "")
-            title = event.get("title", "Untitled")
-            color_name = event.get("color", "primary")
+            # Parse date for header
+            date_obj = datetime.strptime(date_key, "%Y-%m-%d")
+            date_header = date_obj.strftime("%A %m.%d").upper()  # "THURSDAY 11.27"
 
-            # Get color for this calendar
-            event_color = self.colors.get(color_name, self._get_color("primary"))
+            # Draw date header
+            draw.text((x, event_y), date_header,
+                     font=self.fonts["small"], fill=self._get_color("warning"))
+            event_y += header_height
 
-            # Symbol in calendar color
-            draw.text((x, event_y), symbol, font=self.fonts["small"], fill=event_color)
+            # Draw events for this date
+            for event in events_by_date[date_key]:
+                if event_y > max_y:
+                    break
 
-            # Time (fixed width)
-            time_x = x + 18
-            draw.text((time_x, event_y), time_str,
-                     font=self.fonts["small"], fill=self._get_color("secondary"))
+                symbol = event.get("symbol", "●")
+                time_str = event.get("time", "")
+                title = event.get("title", "Untitled")
+                color_name = event.get("color", "primary")
 
-            # Title with wrapping
-            title_x = title_start_x
+                # Truncate title if needed
+                if len(title) > max_title_chars:
+                    title = title[:max_title_chars - 2] + ".."
 
-            # Calculate how many chars fit per line
-            char_width = 9  # Approximate width per character in small font
-            chars_per_line = max(10, int(max_title_width / char_width))
+                # Get color for this calendar
+                event_color = self.colors.get(color_name, self._get_color("primary"))
 
-            if len(title) <= chars_per_line:
-                # Single line
-                draw.text((title_x, event_y), title,
+                # Symbol
+                draw.text((x + 5, event_y), symbol, font=self.fonts["small"], fill=event_color)
+
+                # Time
+                draw.text((x + 22, event_y), time_str,
+                         font=self.fonts["small"], fill=self._get_color("secondary"))
+
+                # Title
+                draw.text((x + 70, event_y), title,
                          font=self.fonts["small"], fill=self._get_color("primary"))
+
                 event_y += line_height
-            else:
-                # Need to wrap - break at word boundary if possible
-                words = title.split()
-                line = ""
-                first_line = True
-
-                for word in words:
-                    test_line = f"{line} {word}".strip() if line else word
-                    if len(test_line) <= chars_per_line:
-                        line = test_line
-                    else:
-                        if line:
-                            draw.text((title_x, event_y), line,
-                                     font=self.fonts["small"], fill=self._get_color("primary"))
-                            event_y += line_height
-                            if event_y > max_y:
-                                break
-                            first_line = False
-                        line = word
-
-                # Draw remaining text
-                if line and event_y <= max_y:
-                    draw.text((title_x, event_y), line,
-                             font=self.fonts["small"], fill=self._get_color("primary"))
-                    event_y += line_height
-
-            events_shown += 1
 
     def render(self, page_index=0, total_pages=1):
         """Render the dashboard page."""
@@ -330,23 +342,32 @@ class DashboardPage(Page):
         arc_height = 70
         arc_y = self.height - arc_height - 15
 
-        # Boxes extend from content_top down to just above the arc
-        box_height = arc_y - content_top - 15
+        # Total height for left column boxes
+        total_left_height = arc_y - content_top - 15
 
-        # Time display (centered in left box)
-        self.draw_time(draw, margin, content_top + 5, now, left_box_width)
+        # Split left column into two boxes: Time+Date (top) and Placeholder (bottom)
+        time_box_height = (total_left_height // 2) - 5
+        placeholder_box_height = total_left_height - time_box_height - 10
+        placeholder_y = content_top + time_box_height + 5
 
-        # Date display (below time, centered in box, using small font)
-        self.draw_date(draw, margin, content_top + 105, now, left_box_width)
+        # Time display (centered in top left box)
+        self.draw_time(draw, margin, content_top, now, left_box_width)
 
-        # Border around time/date section
-        self.draw_border_frame(draw, margin - 5, content_top - 25, left_box_width + 10, box_height)
+        # Date display (below time, centered, medium font)
+        self.draw_date(draw, margin, content_top + 95, now, left_box_width)
 
-        # Events section (right column, same height as time/date box)
+        # Border around time/date section (top left)
+        self.draw_border_frame(draw, margin - 5, content_top - 25, left_box_width + 10, time_box_height)
+
+        # Placeholder module (bottom left)
+        self.draw_placeholder_module(draw, margin, placeholder_y, left_box_width, placeholder_box_height - 20)
+        self.draw_border_frame(draw, margin - 5, placeholder_y - 5, left_box_width + 10, placeholder_box_height)
+
+        # Events section (right column, full height)
         events_x = divider_x + 5
         events_y = content_top - 20
-        self.draw_events(draw, events_x, events_y, right_box_width, box_height, max_events=15)
-        self.draw_border_frame(draw, events_x - 10, content_top - 25, right_box_width + 15, box_height)
+        self.draw_events(draw, events_x, events_y, right_box_width, total_left_height)
+        self.draw_border_frame(draw, events_x - 10, content_top - 25, right_box_width + 15, total_left_height)
 
         # Daylight arc at bottom (no box, no terrain)
         self.draw_daylight_arc(draw, margin, arc_y, self.width - (margin * 2), arc_height, now)

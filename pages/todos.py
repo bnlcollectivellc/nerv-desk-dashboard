@@ -207,6 +207,9 @@ class TodosPage(Page):
                               self.width - margin * 2 + 10, top_height)
 
         # === BOTTOM HALF: NON-NEGOTIABLES + GOALS ===
+        # Task list box width for alignment reference
+        task_box_right_edge = self.width - margin + 5
+
         # Calculate Non-Negotiables width based on longest item
         max_nn_width = 0
         for item in self.NON_NEGOTIABLES:
@@ -215,13 +218,14 @@ class TodosPage(Page):
         nn_box_width = max_nn_width + 35  # Add padding for bullet and margins
 
         goals_box_x = margin + nn_box_width + 15
-        goals_box_width = self.width - goals_box_x - margin + 5
+        # Goals box should extend to same right edge as task list box
+        goals_box_width = task_box_right_edge - goals_box_x
 
         # Non-Negotiables box (left)
         self.draw_non_negotiables(draw, margin, bottom_half_y, nn_box_width, bottom_height)
         self.draw_border_frame(draw, margin - 5, bottom_half_y - 5, nn_box_width, bottom_height)
 
-        # Goals box (right)
+        # Goals box (right) - aligned with task list box
         self.draw_goals(draw, goals_box_x, bottom_half_y, goals_box_width, bottom_height)
         self.draw_border_frame(draw, goals_box_x - 5, bottom_half_y - 5, goals_box_width, bottom_height)
 
